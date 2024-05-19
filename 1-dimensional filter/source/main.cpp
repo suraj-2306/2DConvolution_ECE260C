@@ -129,12 +129,12 @@ int main(void)
     exit(1);
   }
 
-  err = cudaMemcpy(d_output2, output2, OUTPUT_SIZE * sizeof(float),
-                   cudaMemcpyHostToDevice);
-  if (err != cudaSuccess) {
-    fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 2!\n");
-    exit(1);
-  }
+  // err = cudaMemcpy(d_output2, output2, OUTPUT_SIZE * sizeof(float),
+  //                  cudaMemcpyHostToDevice);
+  // if (err != cudaSuccess) {
+  //   fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 2!\n");
+  //   exit(1);
+  // }
 
   int incorrect = 0;
   LinuxTimer timer;
@@ -193,15 +193,15 @@ int main(void)
     // Check for errors
     float mse = 0.f;
     for (int i = 0; i < OUTPUT_SIZE; i++) {
-      float diff = output2[i];
-      mse += diff;
+      float diff = output1[i] - output2[i];
+      mse += diff * diff;
     }
     mse /= OUTPUT_SIZE;
 
     // float mse = 0.f;
     // for (int i = 0; i < OUTPUT_SIZE; i++) {
     //   float diff = output1[i] - output2[i];
-    //   mse += diff;
+    //   mse += diff*diff;
     // }
     // mse /= OUTPUT_SIZE;
 
