@@ -87,7 +87,7 @@ int main(int argc, const char *argv[]) {
 
     // Resize and grayscale
     resize(frame, frame, Size(WIDTH, HEIGHT));
-    cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+    cvtColor(frame, gray, COLOR_BGR2GRAY);
 
     cudaError_t err;
     err = cudaMalloc(&d_sobelOutPtr, WIDTH * HEIGHT * sizeof(uchar));
