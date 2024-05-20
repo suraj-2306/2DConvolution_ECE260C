@@ -13,9 +13,9 @@ __global__ void kernel_filter(const uchar *input, uchar *output,
   const int bx = blockIdx.x;
   const int by = blockIdx.y;
 
-  const float filter[3][3] = {
+  const float filter[FILTER_DIM][FILTER_DIM] = {
       // {0.0625, 0.125, 0.0625}, {0.125, 0.25, 0.125}, {0.0625, 0.125, 0.0625}};
-      {0.25, 0, 0.25}, {0, 0, 0}, {0.25, 0, 0.25}};
+      {0.25, 0, 0, 0, 0.25}, {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0}, {0.25, 0, 0, 0, 0.25}};
 
   const int tid = tx + blockDim.x * ty;
   // Loading of the tiles
@@ -23,12 +23,11 @@ __global__ void kernel_filter(const uchar *input, uchar *output,
   int col = bx * OUTPUT_TILEDIM + tx - FILTER_RADIUS;
 
   extern __shared__ float sh_input[];
-  float pixel;
+  float pixel = 0;
 
   if (row >= 0 && row < height && col >= 0 && col < width) {
     sh_input[tid] = (float)input[col + row * width];
   } else
-
     sh_input[tid] = 0;
 
   __syncthreads();
@@ -40,18 +39,12 @@ __global__ void kernel_filter(const uchar *input, uchar *output,
     if (rowTile >= 0 && rowTile < OUTPUT_TILEDIM && colTile >= 0 &&
         colTile < OUTPUT_TILEDIM) {
 
-      pixel = ((filter[0][0] * sh_input[tx - 1 + (ty - 1) * BLOCKDIM]) +
-               (filter[0][1] * sh_input[tx + (ty - 1) * BLOCKDIM]) +
-               (filter[0][2] * sh_input[tx + 1 + (ty - 1) * BLOCKDIM]) +
-               (filter[1][0] * sh_input[tx - 1 + (ty)*BLOCKDIM]) +
-               (filter[1][1] * sh_input[tx + (ty)*BLOCKDIM]) +
-               (filter[1][2] * sh_input[tx + 1 + (ty)*BLOCKDIM]) +
-               (filter[2][0] * sh_input[tx - 1 + (ty + 1) * BLOCKDIM]) +
-               (filter[2][1] * sh_input[tx + (ty + 1) * BLOCKDIM]) +
-               (filter[2][2] * sh_input[tx + 1 + (ty + 1) * BLOCKDIM]));
-      // printf("%f %f\n", filter[0][1], sh_input[tx + (ty - 1) * BLOCKDIM]);
+      for (int i = 0; i < FILTER_DIM; i++) {
+        for (int j = 0; j < FILTER_DIM; j++) {
+          pixel += (filter[i][j] * sh_input[(tx - FILTER_RADIUS + j) + (ty - FILTER_RADIUS + i)*TILEDIM]);
+        }
+      }
 
-      // printf("%d\n", (int)pixel);
       if (pixel < 0) {
         pixel = 0;
       }
@@ -81,8 +74,13 @@ void filter_gpu(const uchar *input, uchar *output, const uint height,
   CudaSynchronizedTimer timer;
 
   // Launch the kernel
-  const int grid_x = width / OUTPUT_TILEDIM;
-  const int grid_y = height / OUTPUT_TILEDIM;
+  int grid_x = width / OUTPUT_TILEDIM;
+  int grid_y = height / OUTPUT_TILEDIM;
+
+  if (width % OUTPUT_TILEDIM)
+    grid_x++;
+  if (height % OUTPUT_TILEDIM)
+    grid_y++;
 
   dim3 grid(grid_x, grid_y, 1);      // TODO
   dim3 block(BLOCKDIM, BLOCKDIM, 1); // TODO
