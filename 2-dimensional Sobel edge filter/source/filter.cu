@@ -70,68 +70,10 @@ __global__ void kernel_sobel_filter(const uchar *input, uchar *output,
       if (magnitude > 255) {
         magnitude = 255;
       }
-      // printf("%d\n", (int)magnitude);
 
       output[col + row * width] = (int)magnitude;
     }
   }
-
-  // const int tidx = tid % BLOCKDIM, tidy = tid / BLOCKDIM;
-
-  // int pixelx = 0;
-  // int pixely = 0;
-
-  // input += (bx * blockDim.x - FILTER_RADIUS) + (by * blockDim.y) * width -
-  //          FILTER_RADIUS;
-  // output += (bx * blockDim.x - FILTER_RADIUS) + (by * blockDim.y) * width -
-  //           FILTER_RADIUS;
-  // if ((bx * blockDim.x + tidx) < width && (by * blockDim.y + tidy) < height)
-  //   sh_input[tid] = input[tidx + tidy * width];
-  // else
-  //   sh_input[tid] = 0;
-  // __syncthreads();
-
-  // if ((tx > 1 && tx < BLOCKDIM) && (ty > 1 && ty < BLOCKDIM)) {
-
-  //   pixelx =
-  //       (int)((sobel_x[0][0] * sh_input[tidx - 1 + (tidy - 1) * BLOCKDIM]) +
-  //             (sobel_x[0][1] * sh_input[tidx + (tidy - 1) * BLOCKDIM]) +
-  //             (sobel_x[0][2] * sh_input[tidx + 1 + (tidy - 1) * BLOCKDIM]) +
-  //             (sobel_x[1][0] * sh_input[tidx - 1 + (tidy)*BLOCKDIM]) +
-  //             (sobel_x[1][1] * sh_input[tidx + (tidy)*BLOCKDIM]) +
-  //             (sobel_x[1][2] * sh_input[tidx + 1 + (tidy)*BLOCKDIM]) +
-  //             (sobel_x[2][0] * sh_input[tidx - 1 + (tidy + 1) * BLOCKDIM]) +
-  //             (sobel_x[2][1] * sh_input[tidx + (tidy + 1) * BLOCKDIM]) +
-  //             (sobel_x[2][2] * sh_input[tidx + 1 + (tidy + 1) * BLOCKDIM]));
-
-  //   pixely =
-  //       (int)((sobel_y[0][0] * sh_input[tidx - 1 + (tidy - 1) * BLOCKDIM]) +
-  //             (sobel_y[0][1] * sh_input[tidx + (tidy - 1) * BLOCKDIM]) +
-  //             (sobel_y[0][2] * sh_input[tidx + 1 + (tidy - 1) * BLOCKDIM]) +
-  //             (sobel_y[1][0] * sh_input[tidx - 1 + (tidy)*BLOCKDIM]) +
-  //             (sobel_y[1][1] * sh_input[tidx + (tidy)*BLOCKDIM]) +
-  //             (sobel_y[1][2] * sh_input[tidx + 1 + (tidy)*BLOCKDIM]) +
-  //             (sobel_y[2][0] * sh_input[tidx - 1 + (tidy + 1) * BLOCKDIM]) +
-  //             (sobel_y[2][1] * sh_input[tidx + (tidy + 1) * BLOCKDIM]) +
-  //             (sobel_y[2][2] * sh_input[tidx + 1 + (tidy + 1) * BLOCKDIM]));
-
-  //   pixelx *= pixelx;
-  //   pixely *= pixely;
-
-  //   int magnitude = sqrt((float)(pixelx + pixely));
-
-  //   if (magnitude < 0) {
-  //     magnitude = 0;
-  //   }
-  //   if (magnitude > 255) {
-  //     magnitude = 255;
-  //   }
-
-  //   output[ty * width + tx] = (int)magnitude;
-
-  // } else {
-  //   output[ty * width + tx] = input[ty * width + tx];
-  // }
 }
 
 inline int divup(int a, int b) {
