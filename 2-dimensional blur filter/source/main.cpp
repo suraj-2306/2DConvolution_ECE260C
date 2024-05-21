@@ -1,8 +1,8 @@
-#include <iostream>
 #include <cmath>
+#include <iostream>
 
-#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include "filter.h"
 #include "timer.h"
@@ -10,109 +10,209 @@
 using namespace std;
 using namespace cv;
 
-
-int main(int argc, const char * argv[])
+enum filterType
 {
-	VideoCapture cap("input.raw"); 
-	//VideoCapture cap(1); //output of ls /dev/video* will display available video devices and their indices
+  BLUR_CPU,
+  BLUR_GPU,
+  BLUR_GPU_UNI
+};
 
-	int WIDTH  = 768;
-	int HEIGHT = 768;
+int main(int argc, const char *argv[])
+{
+  VideoCapture cap("/mnt/c/Users/ashwi/Desktop/Ashwin/UCSD/Quarters/SP24/ECE260C/Lab3/git/260CCUDA/2-dimensional blur filter/source/input.raw");
+  // VideoCapture cap(1); //output of ls /dev/video* will display available
+  // video devices and their indices
 
-	// 1 argument on command line: WIDTH = HEIGHT = arg
-	if(argc >= 2)
-	{
-		WIDTH = atoi(argv[1]);
-		HEIGHT = WIDTH;
-	}
-	// 2 arguments on command line: WIDTH = arg1, HEIGHT = arg2
-	if(argc >= 3)
-	{
-		HEIGHT = atoi(argv[2]);
-	}
+  int WIDTH = 768;
+  int HEIGHT = 768;
 
+  filterType filter_type = BLUR_GPU;
 
-	// Profiling
-	LinuxTimer timer;
-	LinuxTimer fps_counter;
-	double time_elapsed = 0;
+  // 1 argument on command line: WIDTH = HEIGHT = arg
+  if (argc >= 2)
+  {
+    WIDTH = atoi(argv[1]);
+    HEIGHT = WIDTH;
+  }
+  // 2 arguments on command line: WIDTH = arg1, HEIGHT = arg2
+  if (argc >= 3)
+  {
+    HEIGHT = atoi(argv[2]);
+  }
 
-	// Allocate memory
-	unsigned char* gray_ptr;
-	unsigned char* out_ptr;
-	
-	cudaMallocManaged(&gray_ptr, WIDTH*HEIGHT*sizeof(unsigned char));
-	cudaMallocManaged(&out_ptr, WIDTH*HEIGHT*sizeof(unsigned char));
-	
-	Mat gray = Mat(HEIGHT, WIDTH, CV_8U, gray_ptr);
-	Mat out  = Mat(HEIGHT, WIDTH, CV_8U, out_ptr);
+  if (argc >= 4)
+  {
+    filter_type = static_cast<filterType>(atoi(argv[3]));
+  }
 
-	// More declarations
-	Mat frame;
+  switch (filter_type)
+  {
+  case BLUR_CPU:
+    cout << "Using CPU" << endl;
+    break;
+  case BLUR_GPU:
+    cout << "Using GPU" << endl;
+    break;
+  case BLUR_GPU_UNI:
+    cout << "Using GPU with Unified Memory" << endl;
+    break;
+  }
 
-	char key = 0;
-	int count = 0;
+  // Profiling
+  LinuxTimer timer;
+  LinuxTimer fps_counter;
+  double time_elapsed = 0;
 
+  // Allocate memory
+  unsigned char *gray_ptr;
+  unsigned char *out_ptr;
+  unsigned char *gray_uni_ptr;
+  unsigned char *out_uni_ptr;
+  uchar *d_grayPtr, *d_outPtr;
 
-	// Main loop
-	while(key != 'q')
-	{
-		// Get frame
-		cap >> frame;
+  // Allocate memory
+  gray_ptr = (unsigned char *)malloc(WIDTH * HEIGHT * sizeof(unsigned char));
+  out_ptr = (unsigned char *)malloc(WIDTH * HEIGHT * sizeof(unsigned char));
+  cudaMallocManaged(&gray_uni_ptr, WIDTH * HEIGHT * sizeof(unsigned char));
+  cudaMallocManaged(&out_uni_ptr, WIDTH * HEIGHT * sizeof(unsigned char));
 
-		// If no more frames, wait and exit
-		if(frame.empty())
-		{
-			waitKey();
-			break;
-		}
+  cudaError_t err;
+  err = cudaMalloc(&d_outPtr, WIDTH * HEIGHT * sizeof(uchar));
+  if (err != cudaSuccess)
+  {
+    fprintf(stderr, "GPU_ERROR: cudaMalloc failed output!\n");
+    exit(1);
+  }
 
-		// Resize and grayscale
-		resize(frame, frame, Size(WIDTH, HEIGHT));
-		cvtColor(frame, gray, CV_BGR2GRAY);
+  err = cudaMalloc(&d_grayPtr, WIDTH * HEIGHT * sizeof(uchar));
+  if (err != cudaSuccess)
+  {
+    fprintf(stderr, "GPU_ERROR: cudaMalloc failed grayptr!\n");
+    exit(1);
+  }
 
-		// Run filter
-		timer.start();
-		out = (Scalar)0;
-		filter_gpu(gray.ptr<uchar>(), out.ptr<uchar>(), gray.rows, gray.cols);
-		timer.stop();
+  // Mat gray = Mat(HEIGHT, WIDTH, CV_8U, gray_ptr);
+  // Mat out = Mat(HEIGHT, WIDTH, CV_8U, out_ptr);
+  Mat gray;
+  Mat out;
+  switch (filter_type)
+  {
+  case BLUR_CPU:
+  case BLUR_GPU:
+    gray = Mat(HEIGHT, WIDTH, CV_8U, gray_ptr);
+    out = Mat(HEIGHT, WIDTH, CV_8U, out_ptr);
+    break;
 
-		size_t time_filter = timer.getElapsed();
+  case BLUR_GPU_UNI:
+    gray = Mat(HEIGHT, WIDTH, CV_8U, gray_uni_ptr);
+    out = Mat(HEIGHT, WIDTH, CV_8U, out_uni_ptr);
+    break;
+  }
 
+  // More declarations
+  Mat frame;
 
+  char key = 0;
+  int count = 0;
 
+  // Main loop
+  while (key != 'q')
+  {
+    // Get frame
+    cap >> frame;
 
-		count++;
+    // If no more frames, wait and exit
+    if (frame.empty())
+    {
+      waitKey();
+      break;
+    }
 
-		// FPS count
-		fps_counter.stop();
-		time_elapsed += (fps_counter.getElapsed())/1000000000.0;
-		fps_counter.start();
+    // Resize and grayscale
+    resize(frame, frame, Size(WIDTH, HEIGHT));
+    cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
-		if(count % 10 == 0)
-		{
-			double fps = 10/time_elapsed;
-			time_elapsed = 0;
-			cout << "FPS = " << fps << endl;
-		}
+    // Transfer to GPU memory
+    if (filter_type == BLUR_GPU)
+    {
+      err = cudaMemcpy(d_grayPtr, gray.ptr<uchar>(),
+                       WIDTH * HEIGHT * sizeof(uchar), cudaMemcpyHostToDevice);
 
+      if (err != cudaSuccess)
+      {
+        fprintf(stderr, "GPU_ERROR: Host to device cudaMemCpy failed for grayptr!\n");
+        exit(1);
+      }
+    }
 
-		// Display results
-		if(gray.cols <= 1024 || gray.rows <= 1024)
-		{
-			imshow("Input", gray);
-			imshow("Filter", out);
-			if(count <= 1) { moveWindow("Filter", WIDTH, 0); }
-		}
+    // Run filter
+    timer.start();
+    out = (Scalar)0;
 
+    switch (filter_type)
+    {
+    case BLUR_CPU:
+      filter_cpu(gray.ptr<uchar>(), out.ptr<uchar>(), gray.rows, gray.cols);
+      break;
+    case BLUR_GPU:
+      filter_gpu(d_grayPtr, d_outPtr, gray.rows, gray.cols);
+      err = cudaMemcpy(out.ptr<uchar>(), d_outPtr,
+                       WIDTH * HEIGHT * sizeof(uchar), cudaMemcpyDeviceToHost);
+      if (err != cudaSuccess)
+      {
+        fprintf(stderr, "GPU_ERROR: Device to host cudaMemCpy failed for output!\n");
+        exit(1);
+      }
+      break;
+    case BLUR_GPU_UNI:
+      filter_gpu(gray.ptr<uchar>(), out.ptr<uchar>(), gray.rows, gray.cols);
+      break;
+    }
 
+    timer.stop();
 
-		key = waitKey(1);
-	}
+    size_t time_filter = timer.getElapsed();
 
+    count++;
 
-	cudaFree(gray_ptr);
-	cudaFree(out_ptr);
+    // FPS count
+    fps_counter.stop();
+    time_elapsed += (fps_counter.getElapsed()) / 1000000000.0;
+    fps_counter.start();
 
-	return 0;
+    if (count % 10 == 0)
+    {
+      double fps = 10 / time_elapsed;
+      time_elapsed = 0;
+      cout << "FPS = " << fps << endl;
+    }
+
+    // Display results
+    // if (gray.cols <= 1024 || gray.rows <= 1024)
+    // {
+    //   imshow("Input", gray);
+    //   imshow("Blurred", out);
+    //   if (count <= 1)
+    //   {
+    //     moveWindow("Blurred", WIDTH, 0);
+    //   }
+    //   key = waitKey(1);
+    // }
+
+    // Save results
+    // if (gray.cols <= 1024 || gray.rows <= 1024)
+    // {
+    //   imwrite("Input_original.jpg", gray);
+    //   imwrite("blur.jpg", out);
+    // }
+  }
+
+  free(gray_ptr);
+  free(out_ptr);
+  cudaFree(gray_uni_ptr);
+  cudaFree(out_uni_ptr);
+  cudaFree(d_grayPtr);
+  cudaFree(d_outPtr);
+
+  return 0;
 }
