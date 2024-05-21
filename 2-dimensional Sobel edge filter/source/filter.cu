@@ -99,8 +99,13 @@ void sobel_filter_gpu(const uchar *input, uchar *output, const uint height,
   CudaSynchronizedTimer timer;
 
   // Launch the kernel
-  const int grid_x = width / OUTPUT_TILEDIM;
-  const int grid_y = height / OUTPUT_TILEDIM;
+  int grid_x = width / OUTPUT_TILEDIM;
+  int grid_y = height / OUTPUT_TILEDIM;
+
+  if (width % OUTPUT_TILEDIM)
+    grid_x++;
+  if (height % OUTPUT_TILEDIM)
+    grid_y++;
 
   dim3 grid(grid_x, grid_y, 1);      // TODO
   dim3 block(BLOCKDIM, BLOCKDIM, 1); // TODO
