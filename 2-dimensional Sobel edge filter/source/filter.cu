@@ -6,7 +6,8 @@
 using namespace std;
 
 __global__ void kernel_sobel_filter(const uchar *input, uchar *output,
-                                    const uint height, const uint width) {
+                                    const uint height, const uint width)
+{
 
   const int tx = threadIdx.x;
   const int ty = threadIdx.y;
@@ -14,8 +15,8 @@ __global__ void kernel_sobel_filter(const uchar *input, uchar *output,
   const int by = blockIdx.y;
   // const int sobel_x[9] = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
   // const int sobel_y[9] = {-1, -2, -1, 0, 0, 0, 1, 2, 1};
-  const int sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
-  const int sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+  const int sobel_x[FILTER_DIM][FILTER_DIM] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+  const int sobel_y[FILTER_DIM][FILTER_DIM] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
   const int tid = tx + blockDim.x * ty;
   // Loading of the tiles
@@ -23,51 +24,54 @@ __global__ void kernel_sobel_filter(const uchar *input, uchar *output,
   int col = bx * OUTPUT_TILEDIM + tx - FILTER_RADIUS;
 
   extern __shared__ int sh_input[];
-  int pixelx, pixely;
+  float pixel_x = 0;
+  float pixel_y = 0;
 
-  if (row >= 0 && row < height && col >= 0 && col < width) {
+  if (row >= 0 && row < height && col >= 0 && col < width)
+  {
     sh_input[tid] = input[col + row * width];
-  } else
+  }
+  else
     sh_input[tid] = 0;
 
   __syncthreads();
   // Convolution operation
-  if (row >= 0 && row < height && col >= 0 && col < width) {
+  if (row >= 0 && row < height && col >= 0 && col < width)
+  {
 
     const int rowTile = ty - FILTER_RADIUS;
     const int colTile = tx - FILTER_RADIUS;
     if (rowTile >= 0 && rowTile < OUTPUT_TILEDIM && colTile >= 0 &&
-        colTile < OUTPUT_TILEDIM) {
+        colTile < OUTPUT_TILEDIM)
+    {
 
-      pixelx = (int)((sobel_x[0][0] * sh_input[tx - 1 + (ty - 1) * BLOCKDIM]) +
-                     (sobel_x[0][1] * sh_input[tx + (ty - 1) * BLOCKDIM]) +
-                     (sobel_x[0][2] * sh_input[tx + 1 + (ty - 1) * BLOCKDIM]) +
-                     (sobel_x[1][0] * sh_input[tx - 1 + (ty)*BLOCKDIM]) +
-                     (sobel_x[1][1] * sh_input[tx + (ty)*BLOCKDIM]) +
-                     (sobel_x[1][2] * sh_input[tx + 1 + (ty)*BLOCKDIM]) +
-                     (sobel_x[2][0] * sh_input[tx - 1 + (ty + 1) * BLOCKDIM]) +
-                     (sobel_x[2][1] * sh_input[tx + (ty + 1) * BLOCKDIM]) +
-                     (sobel_x[2][2] * sh_input[tx + 1 + (ty + 1) * BLOCKDIM]));
+      for (int i = 0; i < FILTER_DIM; i++)
+      {
+        for (int j = 0; j < FILTER_DIM; j++)
+        {
+          pixel_x += (sobel_x[i][j] * sh_input[(tx - 1 + j) + (ty - 1 + i) * BLOCKDIM]);
+        }
+      }
 
-      pixely = (int)((sobel_y[0][0] * sh_input[tx - 1 + (ty - 1) * BLOCKDIM]) +
-                     (sobel_y[0][1] * sh_input[tx + (ty - 1) * BLOCKDIM]) +
-                     (sobel_y[0][2] * sh_input[tx + 1 + (ty - 1) * BLOCKDIM]) +
-                     (sobel_y[1][0] * sh_input[tx - 1 + (ty)*BLOCKDIM]) +
-                     (sobel_y[1][1] * sh_input[tx + (ty)*BLOCKDIM]) +
-                     (sobel_y[1][2] * sh_input[tx + 1 + (ty)*BLOCKDIM]) +
-                     (sobel_y[2][0] * sh_input[tx - 1 + (ty + 1) * BLOCKDIM]) +
-                     (sobel_y[2][1] * sh_input[tx + (ty + 1) * BLOCKDIM]) +
-                     (sobel_y[2][2] * sh_input[tx + 1 + (ty + 1) * BLOCKDIM]));
+      for (int i = 0; i < FILTER_DIM; i++)
+      {
+        for (int j = 0; j < FILTER_DIM; j++)
+        {
+          pixel_y += (sobel_y[i][j] * sh_input[(tx - 1 + j) + (ty - 1 + i) * BLOCKDIM]);
+        }
+      }
 
-      pixelx *= pixelx;
-      pixely *= pixely;
+      pixel_x *= pixel_x;
+      pixel_y *= pixel_y;
 
-      int magnitude = sqrt((float)(pixelx + pixely));
+      int magnitude = sqrt((float)(pixel_x + pixel_y));
 
-      if (magnitude < 0) {
+      if (magnitude < 0)
+      {
         magnitude = 0;
       }
-      if (magnitude > 255) {
+      if (magnitude > 255)
+      {
         magnitude = 255;
       }
 
@@ -76,7 +80,8 @@ __global__ void kernel_sobel_filter(const uchar *input, uchar *output,
   }
 }
 
-inline int divup(int a, int b) {
+inline int divup(int a, int b)
+{
   if (a % b)
     return a / b + 1;
   else
@@ -87,14 +92,15 @@ inline int divup(int a, int b) {
  * Wrapper for calling the kernel.
  */
 void sobel_filter_gpu(const uchar *input, uchar *output, const uint height,
-                      const uint width) {
+                      const uint width)
+{
   const int size = height * width * sizeof(uchar);
 
   CudaSynchronizedTimer timer;
 
   // Launch the kernel
-  const int grid_x = width / BLOCKDIM;
-  const int grid_y = height / BLOCKDIM;
+  const int grid_x = width / OUTPUT_TILEDIM;
+  const int grid_y = height / OUTPUT_TILEDIM;
 
   dim3 grid(grid_x, grid_y, 1);      // TODO
   dim3 block(BLOCKDIM, BLOCKDIM, 1); // TODO
@@ -109,12 +115,15 @@ void sobel_filter_gpu(const uchar *input, uchar *output, const uint height,
 }
 
 void sobel_filter_cpu(const uchar *input, uchar *output, const uint height,
-                      const uint width) {
+                      const uint width)
+{
   const int sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
   const int sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
-  for (uint y = 1; y < height - 1; ++y) {
-    for (uint x = 1; x < width - 1; ++x) {
+  for (uint y = 1; y < height - 1; ++y)
+  {
+    for (uint x = 1; x < width - 1; ++x)
+    {
 
       const int pixel_x =
           (int)((sobel_x[0][0] * input[x - 1 + (y - 1) * width]) +
@@ -139,10 +148,12 @@ void sobel_filter_cpu(const uchar *input, uchar *output, const uint height,
 
       float magnitude = sqrt((float)(pixel_x * pixel_x + pixel_y * pixel_y));
 
-      if (magnitude < 0) {
+      if (magnitude < 0)
+      {
         magnitude = 0;
       }
-      if (magnitude > 255) {
+      if (magnitude > 255)
+      {
         magnitude = 255;
       }
 

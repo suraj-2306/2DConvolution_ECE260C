@@ -7,6 +7,7 @@
 #define BLOCKDIM 32
 #define FILTER_RADIUS 1
 #define OUTPUT_TILEDIM (BLOCKDIM - 2 * FILTER_RADIUS)
+#define FILTER_DIM 3
 
 typedef unsigned char uchar;
 typedef unsigned int uint;
