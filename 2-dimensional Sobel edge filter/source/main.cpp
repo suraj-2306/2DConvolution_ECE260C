@@ -10,15 +10,21 @@
 using namespace std;
 using namespace cv;
 
-enum SobelType { SOBEL_OPENCV, SOBEL_CPU, SOBEL_GPU };
+enum SobelType
+{
+  SOBEL_OPENCV,
+  SOBEL_CPU,
+  SOBEL_GPU,
+  SOBEL_GPU_UNI
+};
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char *argv[])
+{
   // Uncomment the following line to use the external camera.
   // VideoCapture cap(1);
 
   // Comment this line if you're using the external camera.
-  VideoCapture cap("/mnt2/home2/raj/Server/UCSD/SServer/ECE260C/assignment/"
-                   "assign3/2-dimensional Sobel edge filter/source/input.raw");
+  VideoCapture cap("/mnt/c/Users/ashwi/Desktop/Ashwin/UCSD/Quarters/SP24/ECE260C/Lab3/git/260CCUDA/2-dimensional Sobel edge filter/source/input.raw");
 
   int WIDTH = 768;
   int HEIGHT = 768;
@@ -26,21 +32,25 @@ int main(int argc, const char *argv[]) {
   SobelType sobel_type = SOBEL_GPU;
 
   // 1 argument on command line: WIDTH = HEIGHT = arg
-  if (argc >= 2) {
+  if (argc >= 2)
+  {
     WIDTH = atoi(argv[1]);
     HEIGHT = WIDTH;
   }
   // 2 arguments on command line: WIDTH = arg1, HEIGHT = arg2
-  if (argc >= 3) {
+  if (argc >= 3)
+  {
     HEIGHT = atoi(argv[2]);
   }
 
   // 3 arguments on command line: WIDTH = arg1, HEIGHT = arg2, type = arg3
-  if (argc >= 4) {
+  if (argc >= 4)
+  {
     sobel_type = static_cast<SobelType>(atoi(argv[3]));
   }
 
-  switch (sobel_type) {
+  switch (sobel_type)
+  {
   case SOBEL_OPENCV:
     cout << "Using OpenCV" << endl;
     break;
@@ -49,6 +59,9 @@ int main(int argc, const char *argv[]) {
     break;
   case SOBEL_GPU:
     cout << "Using GPU" << endl;
+    break;
+  case SOBEL_GPU_UNI:
+    cout << "Using GPU with unified memory" << endl;
     break;
   }
 
@@ -75,12 +88,16 @@ int main(int argc, const char *argv[]) {
   int count = 0;
 
   // Main loop
-  while (key != 'q') {
+  while (key != 'q')
+  {
+    // for (int x=0; x < 50; x++)  {
     // Get frame
     cap >> frame;
 
     // If no more frames, wait and exit
-    if (frame.empty()) {
+    if (frame.empty())
+    {
+      printf("frame is empty!\n");
       waitKey();
       break;
     }
@@ -91,13 +108,15 @@ int main(int argc, const char *argv[]) {
 
     cudaError_t err;
     err = cudaMalloc(&d_sobelOutPtr, WIDTH * HEIGHT * sizeof(uchar));
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess)
+    {
       fprintf(stderr, "GPU_ERROR: cudaMalloc failed output!\n");
       exit(1);
     }
 
     err = cudaMalloc(&d_grayPtr, WIDTH * HEIGHT * sizeof(uchar));
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess)
+    {
       fprintf(stderr, "GPU_ERROR: cudaMalloc failed grayptr!\n");
       exit(1);
     }
@@ -105,14 +124,16 @@ int main(int argc, const char *argv[]) {
     err = cudaMemcpy(d_grayPtr, gray.ptr<uchar>(),
                      WIDTH * HEIGHT * sizeof(uchar), cudaMemcpyHostToDevice);
 
-    if (err != cudaSuccess) {
-      fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 1!\n");
+    if (err != cudaSuccess)
+    {
+      fprintf(stderr, "GPU_ERROR: Host to device cudaMemCpy failed for grayptr!\n");
       exit(1);
     }
     // OpenCV Sobel
     timer.start();
 
-    switch (sobel_type) {
+    switch (sobel_type)
+    {
     case SOBEL_OPENCV:
       Sobel(gray, s_x, CV_8U, 1, 0, 3, 1, 0, BORDER_ISOLATED);
       Sobel(gray, s_y, CV_8U, 0, 1, 3, 1, 0, BORDER_ISOLATED);
@@ -132,10 +153,18 @@ int main(int argc, const char *argv[]) {
 
       err = cudaMemcpy(sobel_out.ptr<uchar>(), d_sobelOutPtr,
                        WIDTH * HEIGHT * sizeof(uchar), cudaMemcpyDeviceToHost);
-      if (err != cudaSuccess) {
+      if (err != cudaSuccess)
+      {
         fprintf(stderr, "GPU_ERROR: cudaMemCpy failed output!\n");
         exit(1);
       }
+      break;
+
+    case SOBEL_GPU_UNI:
+      sobel_out = (Scalar)0;
+      sobel_filter_gpu(gray.ptr<uchar>(), sobel_out.ptr<uchar>(), gray.rows,
+                       gray.cols);
+
       break;
     }
 
@@ -150,27 +179,38 @@ int main(int argc, const char *argv[]) {
     time_elapsed += (fps_counter.getElapsed()) / 1000000000.0;
     fps_counter.start();
 
-    if (count % 10 == 0) {
+    if (count % 10 == 0)
+    {
       double fps = 10 / time_elapsed;
       time_elapsed = 0;
       cout << "FPS = " << fps << endl;
     }
 
     // Display results
-    if (gray.cols <= 1024 || gray.rows <= 1024) {
-      imshow("Input", gray);
-      imshow("Sobel", sobel_out);
-      if (count <= 1) {
-        moveWindow("Sobel", WIDTH, 0);
-      }
-    }
+    // if (gray.cols <= 1024 || gray.rows <= 1024)
+    // {
+    //   imshow("Input", gray);
+    //   imshow("Sobel", sobel_out);
+    //   if (count <= 1)
+    //   {
+    //     moveWindow("Sobel", WIDTH, 0);
+    //   }
 
-    key = waitKey(1);
-    cudaFree(d_grayPtr);
-    cudaFree(d_sobelOutPtr);
+    //   key = waitKey(1);
+    // }
+
+    // Save results
+    // if (gray.cols <= 1024 || gray.rows <= 1024)
+    // {
+    //   imwrite("Input_original.jpg", gray);
+    //   imwrite("Sobel.jpg", sobel_out);
+    // }
   }
-  free(gray_ptr);
-  free(sobel_out_ptr);
+
+  cudaFree(d_grayPtr);
+  cudaFree(d_sobelOutPtr);
+  cudaFree(gray_ptr);
+  cudaFree(sobel_out_ptr);
 
   return 0;
 }
