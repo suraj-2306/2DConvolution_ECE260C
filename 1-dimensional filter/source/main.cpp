@@ -10,7 +10,8 @@
 
 using namespace std;
 
-struct Profile {
+struct Profile
+{
   float time_init;
   float time_cpu;
   float time_gpu;
@@ -21,11 +22,13 @@ struct Profile {
       : time_init(0), time_cpu(0), time_gpu(0), time_rmse(0), time_total(0) {}
 };
 
-Profile computeProfileAverage(const vector<Profile> &p, int n) {
+Profile computeProfileAverage(const vector<Profile> &p, int n)
+{
   n = min((int)p.size(), n);
 
   Profile avg;
-  for (int i = p.size() - 1; i >= (int)p.size() - n; i--) {
+  for (int i = p.size() - 1; i >= (int)p.size() - n; i--)
+  {
     avg.time_init += p[i].time_init;
     avg.time_cpu += p[i].time_cpu;
     avg.time_gpu += p[i].time_gpu;
@@ -48,10 +51,12 @@ void fir_cpu(const float *coeffs, const float *input, float *output, int length,
 // ----------------------------------------------
 {
   // Apply the filter to each input sample
-  for (int n = 0; n < length - filterLength; n++) {
+  for (int n = 0; n < length - filterLength; n++)
+  {
     // Calculate output n
     float acc = 0;
-    for (int k = 0; k < filterLength; k++) {
+    for (int k = 0; k < filterLength; k++)
+    {
       acc += coeffs[k] * input[n + k];
     }
     output[n] = acc;
@@ -66,7 +71,8 @@ void designLPF(float *coeffs, int filterLength, float Fs, float Fx)
 {
   float lambda = M_PI * Fx / (Fs / 2);
 
-  for (int n = 0; n < filterLength; n++) {
+  for (int n = 0; n < filterLength; n++)
+  {
     float mm = n - (filterLength - 1.0) / 2.0;
     if (mm == 0.0)
       coeffs[n] = lambda / M_PI;
@@ -102,19 +108,22 @@ int main(void)
 
   cudaError_t err;
   err = cudaMalloc(&d_output2, OUTPUT_SIZE * sizeof(float));
-  if (err != cudaSuccess) {
+  if (err != cudaSuccess)
+  {
     fprintf(stderr, "GPU_ERROR: cudaMalloc failed!\n");
     exit(1);
   }
 
   err = cudaMalloc(&d_paddedInput, PADDED_SIZE * sizeof(float));
-  if (err != cudaSuccess) {
+  if (err != cudaSuccess)
+  {
     fprintf(stderr, "GPU_ERROR: cudaMalloc failed!\n");
     exit(1);
   }
 
   err = cudaMalloc(&d_coeffs, FILTER_LEN * sizeof(float));
-  if (err != cudaSuccess) {
+  if (err != cudaSuccess)
+  {
     fprintf(stderr, "GPU_ERROR: cudaMalloc failed!\n");
     exit(1);
   }
@@ -124,44 +133,45 @@ int main(void)
 
   err = cudaMemcpy(d_coeffs, coeffs, FILTER_LEN * sizeof(float),
                    cudaMemcpyHostToDevice);
-  if (err != cudaSuccess) {
-    fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 1!\n");
+  if (err != cudaSuccess)
+  {
+    fprintf(stderr, "GPU_ERROR: cudaMemCpy failed!\n");
     exit(1);
   }
-
-  // err = cudaMemcpy(d_output2, output2, OUTPUT_SIZE * sizeof(float),
-  //                  cudaMemcpyHostToDevice);
-  // if (err != cudaSuccess) {
-  //   fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 2!\n");
-  //   exit(1);
-  // }
 
   int incorrect = 0;
   LinuxTimer timer;
 
-  for (int nruns = 0; nruns < 1; nruns++) {
+  for (int nruns = 0; nruns < 100; nruns++)
+  {
     profiler.push_back(Profile());
 
     timer.start();
 
     // Initialize inputs
-    for (int i = 0; i < SAMPLES; i++) {
+    for (int i = 0; i < SAMPLES; i++)
+    {
       input[i] = rand() / (float)RAND_MAX;
     }
 
     // Pad inputs
-    for (int i = 0; i < PADDED_SIZE; i++) {
-      if (i < FILTER_LEN || i >= SAMPLES + FILTER_LEN) {
+    for (int i = 0; i < PADDED_SIZE; i++)
+    {
+      if (i < FILTER_LEN || i >= SAMPLES + FILTER_LEN)
+      {
         paddedInput[i] = 0;
-      } else {
+      }
+      else
+      {
         paddedInput[i] = input[i - FILTER_LEN];
       }
     }
 
     err = cudaMemcpy(d_paddedInput, paddedInput, PADDED_SIZE * sizeof(float),
                      cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-      fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 3!\n");
+    if (err != cudaSuccess)
+    {
+      fprintf(stderr, "GPU_ERROR: cudaMemCpy failed!\n");
       exit(1);
     }
 
@@ -185,66 +195,32 @@ int main(void)
     timer.start();
     err = cudaMemcpy(output2, d_output2, OUTPUT_SIZE * sizeof(float),
                      cudaMemcpyDeviceToHost);
-    if (err != cudaSuccess) {
-      fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 2!\n");
+    if (err != cudaSuccess)
+    {
+      fprintf(stderr, "GPU_ERROR: cudaMemCpy failed!\n");
       exit(1);
     }
 
     // Check for errors
     float mse = 0.f;
-    for (int i = 0; i < OUTPUT_SIZE; i++) {
+    for (int i = 0; i < OUTPUT_SIZE; i++)
+    {
       float diff = output1[i] - output2[i];
       mse += diff * diff;
     }
     mse /= OUTPUT_SIZE;
-
-    // float mse = 0.f;
-    // for (int i = 0; i < OUTPUT_SIZE; i++) {
-    //   float diff = output1[i] - output2[i];
-    //   mse += diff*diff;
-    // }
-    // mse /= OUTPUT_SIZE;
 
     timer.stop();
 
     profiler.back().time_rmse = timer.getElapsed() / 1000000.f;
 
     Profile avg = computeProfileAverage(profiler, 20);
-    // if (nruns == 0)
-    // printf("Time Init: %.2fms  Time CPU: %.2fms  Time GPU: %.2fms  Time "
-    //        "RMSE: %.2fms  Time total: %.2fms  RMSE: %.3f\n",
-    //        avg.time_init, avg.time_cpu, avg.time_gpu, avg.time_rmse,
-    //        avg.time_total, sqrt(mse));
+
     printf("Time Init: %.2fms  Time CPU: %.2fms  Time GPU: %.2fms  Time "
            "RMSE: %.2fms  Time total: %.2fms  RMSE: %.3f\n",
            avg.time_init, avg.time_cpu, avg.time_gpu, avg.time_rmse,
            avg.time_total, sqrt(mse));
-    // Print result
-    // printArray(input, SAMPLES, false);
-    // cout << "\n";
-    // printArray(paddedInput, PADDED_SIZE, false);
-    // cout << "\n";
-    // printArray(output1, OUTPUT_SIZE, false);
-    // cout << "\n";
-    // printArray(output2, OUTPUT_SIZE, false);
-    // cout << "\n";
-    // cout << endl;
   }
-
-  // TODO free with cuda
-  // err = cudaMemcpy(d_coeffs, coeffs, FILTER_LEN * sizeof(float),
-  //                  cudaMemcpyHostToDevice);
-  // if (err != cudaSuccess) {
-  //   fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 1!\n");
-  //   exit(1);
-  // }
-
-  // err = cudaMemcpy(d_paddedInput, paddedInput, PADDED_SIZE * sizeof(float),
-  //                  cudaMemcpyHostToDevice);
-  // if (err != cudaSuccess) {
-  //   fprintf(stderr, "GPU_ERROR: cudaMemCpy failed 3!\n");
-  //   exit(1);
-  // }
 
   cudaFree(d_paddedInput);
   cudaFree(d_output2);
